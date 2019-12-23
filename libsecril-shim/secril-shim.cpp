@@ -24,6 +24,9 @@ int simRuimStatus = -1;
 /* Store SIM PIN attempts */
 int simPinAttempts = 3;
 
+/* Store the count of times SIM_STATUS was queried */
+static int simStatusReqCount = 0;
+
 /* Variables and methods for RIL_REQUEST_DEVICE_IDENTITY support */
 static char imei[16];
 static char imeisv[17];
@@ -145,6 +148,9 @@ static void onRequestCdmaGetSubscriptionSource(int request, void *data, size_t d
 	RLOGI("%s: got request %s (data:%p datalen:%d)\n", __FUNCTION__,
 		requestToString(request),
 		data, datalen);
+
+	rilEnv->OnRequestComplete(t, RIL_E_REQUEST_NOT_SUPPORTED, NULL, 0);
+	return;
         RIL_RadioState radioState = (RIL_RadioState)origRilFunctions->onStateRequest();
 
 	cdmaSubscriptionSource = decodeCdmaSubscriptionSource(radioState);
@@ -391,22 +397,34 @@ static void onRequestShim(int request, void *data, size_t datalen, RIL_Token t)
 
 static void onCompleteRequestGetSimStatus(RIL_Token t, RIL_Errno e, void *response) {
 	/* While at it, upgrade the response to RIL_CardStatus_v6 */
-	RIL_CardStatus_v5_samsung *p_cur = ((RIL_CardStatus_v5_samsung *) response);
-	RIL_CardStatus_v6 v6response;
+	RIL_CardStatus_v6 *p_cur = ((RIL_CardStatus_v6 *) response);
+	RIL_CardStatus_v5 v5response;
 
-	v6response.card_state = p_cur->card_state;
-	v6response.universal_pin_state = p_cur->universal_pin_state;
-	v6response.gsm_umts_subscription_app_index = p_cur->gsm_umts_subscription_app_index;
-	v6response.cdma_subscription_app_index = p_cur->cdma_subscription_app_index;
-	v6response.ims_subscription_app_index = -1;
-	v6response.num_applications = p_cur->num_applications;
+	/* HAX: if requested first time, just fake it */
+	if (p_cur->card_state == RIL_CARDSTATE_ABSENT && simStatusReqCount == 0) {
+		RLOGE("%s: got RIL_CARDSTATE_ABSENT, faking it", __FUNCTION__);
+		//rilEnv->OnRequestComplete(t, RIL_E_RADIO_NOT_AVAILABLE, NULL, 0);
+		//return;
+		p_cur->card_state = RIL_CARDSTATE_PRESENT;
+	}
+	simStatusReqCount++;
+
+	v5response.card_state = p_cur->card_state;
+	v5response.universal_pin_state = p_cur->universal_pin_state;
+	v5response.gsm_umts_subscription_app_index = p_cur->gsm_umts_subscription_app_index;
+	v5response.cdma_subscription_app_index = -1;
+	//v5response.ims_subscription_app_index = -1;
+	v5response.num_applications = 1;
 
 	int i;
 	for (i = 0; i < RIL_CARD_MAX_APPS; ++i)
-		memcpy(&v6response.applications[i], &p_cur->applications[i], sizeof(RIL_AppStatus));
+		memcpy(&v5response.applications[i], &p_cur->applications[i], sizeof(RIL_AppStatus));
+
+	v5response.applications[0].pin1 = RIL_PINSTATE_DISABLED;
+	v5response.applications[0].pin2 = RIL_PINSTATE_ENABLED_NOT_VERIFIED;
 
 	/* Send the fixed response to libril */
-	rilEnv->OnRequestComplete(t, e, &v6response, sizeof(RIL_CardStatus_v6));
+	rilEnv->OnRequestComplete(t, e, &v5response, sizeof(RIL_CardStatus_v5));
 }
 
 static void onRequestCompleteVoiceRegistrationState(RIL_Token t, RIL_Errno e, void *response, size_t responselen) {
@@ -573,6 +591,7 @@ static void onRequestCompleteShim(RIL_Token t, RIL_Errno e, void *response, size
                 case RIL_REQUEST_VOICE_REGISTRATION_STATE:
                         /* libsecril expects responselen of 60 (bytes) */
                         /* numstrings (15 * sizeof(char *) = 60) */
+			RLOGE("%s: got request %s responselen=%d \n", __FUNCTION__, requestToString(request), responselen);
 			if (response != NULL && responselen < VOICE_REGSTATE_SIZE) {
 				RLOGD("%s: got request %s and shimming response!\n", __FUNCTION__, requestToString(request));
 				onRequestCompleteVoiceRegistrationState(t, e, response, responselen);
@@ -585,7 +604,7 @@ static void onRequestCompleteShim(RIL_Token t, RIL_Errno e, void *response, size
 			return;
 		case RIL_REQUEST_GET_SIM_STATUS:
 			/* Remove unused extra elements from RIL_AppStatus */
-			if (response != NULL && responselen == sizeof(RIL_CardStatus_v5_samsung)) {
+			if (response != NULL) {
 				RLOGD("%s: got request %s and shimming response!\n", __FUNCTION__, requestToString(request));
 				onCompleteRequestGetSimStatus(t, e, response);
 				return;

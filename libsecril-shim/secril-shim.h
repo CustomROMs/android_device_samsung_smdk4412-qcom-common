@@ -11,12 +11,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef HOST
 #include <binder/Parcel.h>
 #include <cutils/compiler.h>
 #include <cutils/properties.h>
 #include <sys/cdefs.h>
+#endif
 #include <telephony/ril.h>
+#ifndef HOST
 #include <utils/Log.h>
+#endif
 
 #define RIL_LIB_PATH "/system/lib/libsec-ril.so"
 
@@ -51,6 +55,7 @@ typedef struct
   RIL_AppStatus_samsung applications[RIL_CARD_MAX_APPS];
 } RIL_CardStatus_v5_samsung;
 
+#ifndef HOST
 /* TODO: Do we really need to redefine these? They aren't in a header... */
 typedef struct {
     int requestNumber;
@@ -67,6 +72,7 @@ typedef struct RequestInfo {
     RIL_SOCKET_ID socket_id;
     int wasAckSent;
 } RequestInfo;
+#endif
 
 #endif /* __SECRIL_SHIM_H__ */
 
