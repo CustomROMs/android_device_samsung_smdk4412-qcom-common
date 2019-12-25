@@ -38,8 +38,3 @@ endif
 PRODUCT_COPY_FILES += \
     $(GPS_CONF):/system/etc/gps.conf \
     $(LOCAL_PATH)/gps/etc/sap.conf:/system/etc/sap.conf
-
-# RIL
-PRODUCT_PACKAGES += \
-    libshim_ril \
-    libsecril-shim

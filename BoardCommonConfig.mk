@@ -20,10 +20,3 @@ TARGET_SPECIFIC_HEADER_PATH := device/samsung/smdk4412-qcom-common/include
 
 # GPS
 TARGET_NO_RPC := true
-
-# Radio
-BOARD_GLOBAL_CFLAGS += -DDISABLE_ASHMEM_TRACKING
-
-TARGET_LD_SHIM_LIBS += \
-    /system/lib/libsec-ril.so|libshim_ril.so
-
